@@ -1,0 +1,27 @@
+- name: Ensure /etc/team2 exists
+  file:
+    path: /etc/team2
+    state: directory
+    mode: "0755"
+
+- name: Write env file
+  template:
+    src: env.j2
+    dest: "{{ env_path }}"
+    mode: "0600"
+
+- name: Install systemd unit
+  template:
+    src: systemd.service.j2
+    dest: "{{ service_unit }}"
+    mode: "0644"
+
+- name: Reload systemd
+  systemd:
+    daemon_reload: true
+
+- name: Enable and restart service
+  systemd:
+    name: "{{ container_name }}"
+    enabled: true
+    state: restarted

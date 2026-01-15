@@ -1,0 +1,16 @@
+[Unit]
+Description={{ container_name }}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Restart=always
+ExecStartPre=/usr/bin/podman pull {{ harbor_registry }}/{{ image_name }}:{{ image_tag }}
+ExecStart=/usr/bin/podman run --rm --name {{ container_name }} \
+  -p {{ host_port }}:{{ service_port }} \
+  --env-file {{ env_path }} \
+  {{ harbor_registry }}/{{ image_name }}:{{ image_tag }}
+ExecStop=/usr/bin/podman stop -t 10 {{ container_name }}
+
+[Install]
+WantedBy=multi-user.target

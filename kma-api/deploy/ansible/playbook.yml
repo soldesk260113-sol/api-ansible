@@ -1,0 +1,4 @@
+- hosts: api_nodes
+  become: true
+  roles:
+    - kma_api

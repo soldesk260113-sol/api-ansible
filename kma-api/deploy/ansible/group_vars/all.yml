@@ -1,0 +1,10 @@
+harbor_registry: "10.2.2.40:5000"
+image_name: "team2/kma-api"
+image_tag: "latest"
+
+container_name: "kma-api"
+service_port: 8000
+host_port: 30080
+
+env_path: "/etc/team2/kma-api.env"
+service_unit: "/etc/systemd/system/kma-api.service"
