@@ -8,3 +8,6 @@ host_port: 30080
 
 env_path: "/etc/team2/kma-api.env"
 service_unit: "/etc/systemd/system/kma-api.service"
+
+kma_authkey: "MmNnsQppQqGjZ7EKaaKhgQ"
+
