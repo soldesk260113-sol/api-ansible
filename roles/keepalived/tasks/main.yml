@@ -1,0 +1,22 @@
+- name: Install keepalived
+  become: true
+  package:
+    name: keepalived
+    state: present
+
+- name: Deploy keepalived.conf
+  become: true
+  template:
+    src: keepalived.conf.j2
+    dest: /etc/keepalived/keepalived.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart keepalived
+
+- name: Enable and start keepalived
+  become: true
+  systemd:
+    name: keepalived
+    enabled: true
+    state: started
