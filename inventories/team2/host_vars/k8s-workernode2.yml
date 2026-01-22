@@ -1,14 +1,6 @@
 keepalived_router_id: WN2_VIP
 
 keepalived_instances:
-  - name: VI_INGRESS
-    interface: ens160
-    vrid: 200
-    priority: 90
-    advert_int: 1
-    auth_pass: ingvip01
-    vip: 10.2.2.101/24
-
   - name: API_VIP
     interface: ens160
     vrid: 53

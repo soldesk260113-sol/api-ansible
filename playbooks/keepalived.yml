@@ -1,0 +1,8 @@
+<<<<<<< Updated upstream
+=======
+- name: Apply keepalived API VIP config
+  hosts: api_vip
+  gather_facts: false
+  roles:
+    - keepalived
+>>>>>>> Stashed changes
