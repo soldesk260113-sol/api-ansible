@@ -1,5 +1,0 @@
-- name: Apply keepalived VIP config
-  hosts: all
-  gather_facts: false
-  roles:
-    - keepalived
