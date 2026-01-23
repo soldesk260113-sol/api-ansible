@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request
 from app.services.kma_client import call_kma
 from app.services.time_rules import ultra_ncst_base_datetime
 from app.services.cache import client as redis_client, make_key, cache_get, cache_set
+from app.services.regions import REGIONS  # ✅ 추가
 import os
 
 router = APIRouter()
@@ -44,7 +45,9 @@ def get_weather(nx: int = 60, ny: int = 127, request: Request = None):
     # ===== Redis cache (ultra nowcast) =====
     r = redis_client()
     prefix = os.getenv("REDIS_PREFIX", "weather")
-    ttl = int(os.getenv("REDIS_TTL_SECONDS", "60"))
+
+    # ✅ 초단기 TTL: 10분(600초) 기본값
+    ttl = int(os.getenv("REDIS_TTL_ULTRA_SECONDS", "600"))
 
     # request가 있으면 실제 URL 전체를 키로 쓰고,
     # 내부 함수 호출(request=None)일 땐 파라미터 기반으로 키를 만든다.
@@ -84,3 +87,20 @@ def get_weather(nx: int = 60, ny: int = 127, request: Request = None):
 @router.get("/ultra")
 def get_ultra(nx: int = 60, ny: int = 127, request: Request = None):
     return get_weather(nx, ny, request)
+
+# ✅ 6지역 region 엔드포인트 추가
+@router.get("/ultra/{region}")
+def get_ultra_by_region(region: str, request: Request = None):
+    """
+    6개 지역(서울/대전/광주/대구/부산/제주) 초단기실황
+    예) /weather/ultra/seoul
+    """
+    if region not in REGIONS:
+        return {"error": "지원하지 않는 지역입니다", "supported": list(REGIONS.keys())}
+
+    nx = REGIONS[region]["nx"]
+    ny = REGIONS[region]["ny"]
+
+    # request가 있으면 URL 기반 키로 지역별 캐시 자동 분리됨
+    return get_weather(nx=nx, ny=ny, request=request)
+
