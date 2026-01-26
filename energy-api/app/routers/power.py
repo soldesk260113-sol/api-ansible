@@ -1,37 +1,79 @@
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Query
 from app.services.kepco_client import call_kepco_house_ave
-from app.services.cache import client as redis_client, make_key, cache_get, cache_set
-import os
+from app.services.db import fetch_all, execute
 
-router = APIRouter()
+router = APIRouter(tags=["power"])
+
 
 @router.get("/monthly")
 def power_monthly(
-    request: Request,
     year: int = Query(..., ge=2000, le=2100),
     month: int = Query(..., ge=1, le=12),
     metroCd: str = Query(..., min_length=1),
 ):
     """
     /power/monthly?year=2020&month=11&metroCd=11
-    cityCd는 사용하지 않음(생략)
     """
 
-    # ===== Redis cache (energy monthly) =====
-    r = redis_client()
-    prefix = os.getenv("REDIS_PREFIX", "energy")
-    ttl = int(os.getenv("REDIS_TTL_SECONDS", "600"))  # 에너지는 10분 기본
+    # 1️⃣ DB 조회
+    rows = fetch_all(
+        """
+        SELECT *
+        FROM app.energy_kepco_monthly
+        WHERE year=%s AND month=%s AND metro_cd=%s
+        ORDER BY city
+        """,
+        (year, month, metroCd),
+    )
 
-    raw = str(request.url)
-    k = make_key(prefix, raw)
+    if rows:
+        return {
+            "source": "db",
+            "count": len(rows),
+            "data": rows,
+        }
 
-    cached = cache_get(r, k)
-    if cached is not None:
-        return {"cached": True, **cached}
-    # =======================================
-
+    # 2️⃣ 외부 API 호출
     result = call_kepco_house_ave(year=year, month=month, metroCd=metroCd)
+    data = result["data"]["data"]
 
-    # 성공 응답만 캐싱하고 싶으면 여기서 result의 ok 여부 체크 가능
-    cache_set(r, k, result, ttl)
-    return {"cached": False, **result}
+    # 3️⃣ DB INSERT
+    insert_sql = """
+        INSERT INTO app.energy_kepco_monthly
+        (year, month, metro_cd, metro_name, city, house_cnt, power_usage, bill)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+        ON CONFLICT DO NOTHING
+    """
+
+    for r in data:
+        execute(
+            insert_sql,
+            (
+                year,
+                month,
+                metroCd,
+                r["metro"],
+                r["city"],
+                r["houseCnt"],
+                r["powerUsage"],
+                r["bill"],
+            ),
+        )
+
+    # 4️⃣ 다시 DB 조회
+    rows = fetch_all(
+        """
+        SELECT *
+        FROM app.energy_kepco_monthly
+        WHERE year=%s AND month=%s AND metro_cd=%s
+        ORDER BY city
+        """,
+        (year, month, metroCd),
+    )
+
+    return {
+        "source": "api→db",
+        "count": len(rows),
+        "data": rows,
+    }
+
