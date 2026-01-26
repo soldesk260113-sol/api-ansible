@@ -1,9 +1,10 @@
+# app/routers/short_fcst.py
 from fastapi import APIRouter, Request
-from datetime import datetime, timedelta
 import os
 
 from app.services.kma_client import call_kma
 from app.services.cache import client as redis_client, make_key, cache_get, cache_set
+from app.services.time_rules import short_fcst_base_datetime
 
 router = APIRouter()
 
@@ -12,30 +13,11 @@ KMA_URL_SHORT_FCST = (
     "VilageFcstInfoService_2.0/getVilageFcst"
 )
 
-def short_fcst_base_datetime(now=None):
-    if now is None:
-        now = datetime.now()
-
-    buffer_min = int(os.getenv("KMA_SHORT_BUFFER_MIN", "20"))
-    now = now - timedelta(minutes=buffer_min)
-
-    base_hours = [2, 5, 8, 11, 14, 17, 20, 23]
-    hh = now.hour
-
-    if hh < 2:
-        y = now - timedelta(days=1)
-        return y.strftime("%Y%m%d"), "2300"
-
-    cand = max([h for h in base_hours if h <= hh])
-    return now.strftime("%Y%m%d"), f"{cand:02d}00"
-
-
 def _to_float(v):
     try:
         return float(v)
     except Exception:
         return v
-
 
 def simplify_short_fcst(data, nx, ny):
     items = (
@@ -83,7 +65,6 @@ def simplify_short_fcst(data, nx, ny):
         "hourly": hourly,
     }
 
-
 @router.get("/short")
 def get_short(nx: int = 60, ny: int = 127, request: Request = None):
     prefix = os.getenv("REDIS_PREFIX", "weather")
@@ -92,7 +73,6 @@ def get_short(nx: int = 60, ny: int = 127, request: Request = None):
     raw = str(request.url) if request else f"/weather/short?nx={nx}&ny={ny}"
     k = make_key(prefix, raw)
 
-    # 캐시 장애는 무시하고 진행
     r = None
     try:
         r = redis_client()

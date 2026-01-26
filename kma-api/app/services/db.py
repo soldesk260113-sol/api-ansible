@@ -52,4 +52,3 @@ def execute(sql: str, params: tuple = ()):
     with get_cursor(dict_cursor=False) as (_, cur):
         cur.execute(sql, params)
         return cur.rowcount
-

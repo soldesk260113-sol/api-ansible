@@ -2,3 +2,4 @@ fastapi
 uvicorn[standard]
 requests
 redis>=5.0.0
+psycopg2-binary

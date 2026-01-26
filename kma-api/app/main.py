@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from app.routers.ultra_ncst import router as ultra_router
 from app.routers.short_fcst import router as short_router
-from app.routers.mid_land_fcst import router as mid_land_router
+from app.routers.mid_land import router as mid_land_router
 from app.routers.mid_temp import router as mid_temp_router
 
 app = FastAPI(
