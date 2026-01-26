@@ -1,8 +1,12 @@
+from psycopg2.extras import Json
+import os
 from fastapi import APIRouter, HTTPException, Query
 from app.services.datago_client import call_odcloud
-from app.services.db import fetch_all, execute
+from app.services.db import fetch_one, execute
 
 router = APIRouter(prefix="/gas", tags=["gas"])
+
+SCHEMA = os.getenv("DB_SCHEMA", "api")
 
 ODCLOUD_DATASET_URL = "https://api.odcloud.kr/api/15040818/v1/uddi:0873d163-4ed7-49f9-bf95-8eb5c7e35fad"
 
@@ -30,26 +34,33 @@ SIDO_MAP = {
 @router.get("/sido/year")
 def gas_sido_year(
     year: int = Query(..., ge=2000, le=2100),
+    regionCode: str = Query("11", min_length=1),  # 기본 서울
     page: int = 1,
     perPage: int = 200,
 ):
-    rows = fetch_all(
-        """
-        SELECT *
-        FROM app.energy_gas
-        WHERE year = %s
-        ORDER BY sido_name
-        """,
-        (year,),
-    )
+    y = str(year)
 
-    if rows:
+    # 1) DB 조회 (최신 1건)
+    row = fetch_one(
+        f"""
+        SELECT id, region_code, year, data, created_at
+        FROM {SCHEMA}.energy_gas
+        WHERE region_code = %s AND year = %s
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (regionCode, y),
+    )
+    if row:
         return {
             "source": "db",
-            "count": len(rows),
-            "data": rows,
+            "regionCode": row["region_code"],
+            "year": row["year"].strip() if isinstance(row["year"], str) else row["year"],
+            "createdAt": row["created_at"].isoformat() if row.get("created_at") else None,
+            "data": row["data"],
         }
 
+    # 2) 외부 API 호출
     try:
         result = call_odcloud(
             ODCLOUD_DATASET_URL,
@@ -60,52 +71,32 @@ def gas_sido_year(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    data = result.get("data", [])
-
-    insert_sql = """
-        INSERT INTO app.energy_gas
-        (year, sido_cd, sido_name, supply_value, unit)
-        VALUES (%s,%s,%s,%s,%s)
-        ON CONFLICT DO NOTHING
-    """
-
-    for r in data:
-        row_year = int(r.get("연도") or year)
-
-        for sido_name, sido_cd in SIDO_MAP.items():
-            v = r.get(sido_name)
-            if v in (None, "", "-"):
-                continue
-
-            try:
-                supply = float(str(v).replace(",", ""))
-            except ValueError:
-                continue
-
-            execute(
-                insert_sql,
-                (
-                    row_year,
-                    sido_cd,
-                    sido_name,
-                    supply,
-                    "unknown",
-                ),
-            )
-
-    rows = fetch_all(
-        """
-        SELECT *
-        FROM app.energy_gas
-        WHERE year = %s
-        ORDER BY sido_name
+    # 3) 원본 json 저장 (그냥 통째로)
+    execute(
+        f"""
+        INSERT INTO {SCHEMA}.energy_gas (region_code, year, data)
+        VALUES (%s, %s, %s)
         """,
-        (year,),
+        (regionCode, y, Json(result)),
+    )
+
+    # 4) 다시 DB 조회
+    row = fetch_one(
+        f"""
+        SELECT id, region_code, year, data, created_at
+        FROM {SCHEMA}.energy_gas
+        WHERE region_code = %s AND year = %s
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (regionCode, y),
     )
 
     return {
         "source": "api→db",
-        "count": len(rows),
-        "data": rows,
+        "regionCode": row["region_code"],
+        "year": row["year"].strip() if isinstance(row["year"], str) else row["year"],
+        "createdAt": row["created_at"].isoformat() if row.get("created_at") else None,
+        "data": row["data"],
     }
 

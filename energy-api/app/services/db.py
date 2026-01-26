@@ -8,6 +8,8 @@ from psycopg2.extras import RealDictCursor
 log = logging.getLogger(__name__)
 
 def get_conn():
+    schema = os.getenv("DB_SCHEMA", "public").strip() or "public"
+
     return psycopg2.connect(
         host=os.getenv("DB_HOST"),
         port=int(os.getenv("DB_PORT", "5432")),
@@ -16,6 +18,8 @@ def get_conn():
         password=os.getenv("DB_PASSWORD"),
         sslmode=os.getenv("DB_SSLMODE", "disable"),
         connect_timeout=3,
+        # ✅ 핵심: 세션 search_path를 DB_SCHEMA로 고정
+        options=f"-c search_path={schema}",
     )
 
 @contextmanager
