@@ -1,8 +1,12 @@
-from fastapi import APIRouter, Query
+from psycopg2.extras import Json
+import os
+from fastapi import APIRouter, Query, HTTPException
 from app.services.kepco_client import call_kepco_house_ave
-from app.services.db import fetch_all, execute
+from app.services.db import fetch_one, execute
 
 router = APIRouter(tags=["power"])
+
+SCHEMA = os.getenv("DB_SCHEMA", "api")
 
 
 @router.get("/monthly")
@@ -12,68 +16,64 @@ def power_monthly(
     metroCd: str = Query(..., min_length=1),
 ):
     """
-    /power/monthly?year=2020&month=11&metroCd=11
+    /power/monthly?year=2024&month=12&metroCd=11
+    DB: api.energy_kepco_monthly(region_code, ym, data, created_at)
     """
+    ym = f"{year}{month:02d}"  # YYYYMM
 
-    # 1️⃣ DB 조회
-    rows = fetch_all(
-        """
-        SELECT *
-        FROM app.energy_kepco_monthly
-        WHERE year=%s AND month=%s AND metro_cd=%s
-        ORDER BY city
+    # 1) DB 조회 (최신 1건)
+    row = fetch_one(
+        f"""
+        SELECT id, region_code, ym, data, created_at
+        FROM {SCHEMA}.energy_kepco_monthly
+        WHERE region_code = %s AND ym = %s
+        ORDER BY created_at DESC
+        LIMIT 1
         """,
-        (year, month, metroCd),
+        (metroCd, ym),
     )
 
-    if rows:
+    if row:
         return {
             "source": "db",
-            "count": len(rows),
-            "data": rows,
+            "regionCode": row["region_code"],
+            "ym": row["ym"].strip() if isinstance(row["ym"], str) else row["ym"],
+            "createdAt": row["created_at"].isoformat() if row.get("created_at") else None,
+            "data": row["data"],
         }
 
-    # 2️⃣ 외부 API 호출
-    result = call_kepco_house_ave(year=year, month=month, metroCd=metroCd)
-    data = result["data"]["data"]
+    # 2) 외부 API 호출
+    try:
+        result = call_kepco_house_ave(year=year, month=month, metroCd=metroCd)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
-    # 3️⃣ DB INSERT
-    insert_sql = """
-        INSERT INTO app.energy_kepco_monthly
-        (year, month, metro_cd, metro_name, city, house_cnt, power_usage, bill)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-        ON CONFLICT DO NOTHING
-    """
-
-    for r in data:
-        execute(
-            insert_sql,
-            (
-                year,
-                month,
-                metroCd,
-                r["metro"],
-                r["city"],
-                r["houseCnt"],
-                r["powerUsage"],
-                r["bill"],
-            ),
-        )
-
-    # 4️⃣ 다시 DB 조회
-    rows = fetch_all(
-        """
-        SELECT *
-        FROM app.energy_kepco_monthly
-        WHERE year=%s AND month=%s AND metro_cd=%s
-        ORDER BY city
+    # 3) DB INSERT (원본 jsonb 저장)
+    execute(
+        f"""
+        INSERT INTO {SCHEMA}.energy_kepco_monthly (region_code, ym, data)
+        VALUES (%s, %s, %s)
         """,
-        (year, month, metroCd),
+        (metroCd, ym, Json(result)),
+    )
+
+    # 4) 다시 DB 조회
+    row = fetch_one(
+        f"""
+        SELECT id, region_code, ym, data, created_at
+        FROM {SCHEMA}.energy_kepco_monthly
+        WHERE region_code = %s AND ym = %s
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (metroCd, ym),
     )
 
     return {
         "source": "api→db",
-        "count": len(rows),
-        "data": rows,
+        "regionCode": row["region_code"],
+        "ym": row["ym"].strip() if isinstance(row["ym"], str) else row["ym"],
+        "createdAt": row["created_at"].isoformat() if row.get("created_at") else None,
+        "data": row["data"],
     }
 
