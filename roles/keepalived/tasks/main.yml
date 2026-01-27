@@ -20,3 +20,35 @@
     name: keepalived
     enabled: true
     state: started
+
+
+# ===== haproxy =====
+
+- name: Install haproxy
+  become: true
+  package:
+    name: haproxy
+    state: present
+
+- name: Deploy haproxy.cfg (API_VIP -> Ingress_VIP L4 forward)
+  become: true
+  copy:
+    src: haproxy.cfg
+    dest: /etc/haproxy/haproxy.cfg
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart haproxy
+
+- name: Validate haproxy.cfg
+  become: true
+  command: haproxy -c -f /etc/haproxy/haproxy.cfg
+  changed_when: false
+
+- name: Enable and start haproxy
+  become: true
+  systemd:
+    name: haproxy
+    enabled: true
+    state: started
+

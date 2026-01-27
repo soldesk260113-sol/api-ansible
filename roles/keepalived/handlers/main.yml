@@ -3,3 +3,9 @@
   systemd:
     name: keepalived
     state: restarted
+
+- name: Restart haproxy
+  become: true
+  systemd:
+    name: haproxy
+    state: restarted
