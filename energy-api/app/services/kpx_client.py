@@ -1,4 +1,3 @@
-# app/services/kpx_client.py
 import os
 import hashlib
 from fastapi import HTTPException
@@ -34,9 +33,11 @@ def call_kpx_now(page: int = 1, perPage: int = 10) -> dict:
         raise HTTPException(500, "KPX_ODCLOUD_DATASET_URL not set")
     url = _clean_url(url)
 
-    prefix = (os.getenv("REDIS_PREFIX", "energy") or "energy").strip() or "energy"
-    ttl = int(os.getenv("KPX_CACHE_TTL", "600"))
+    # ✅ KPX 전용 prefix로 분리 (과거 router 캐시 값과 키 충돌 방지)
+    base_prefix = (os.getenv("REDIS_PREFIX", "energy") or "energy").strip() or "energy"
+    prefix = f"{base_prefix}-kpx"
 
+    ttl = int(os.getenv("KPX_CACHE_TTL", "600"))
     raw_key = f"kpx_now?page={page}&perPage={perPage}"
     cache_key = _make_cache_key(prefix, raw_key)
 
@@ -46,11 +47,7 @@ def call_kpx_now(page: int = 1, perPage: int = 10) -> dict:
         cached = cache_get(r, cache_key)
         if cached is not None:
             cached = _strip_cache_fields(cached)
-            return {
-                **cached,
-                "cache": True,
-                "cache_key": cache_key,
-            }
+            return {**cached, "cache": True, "cache_key": cache_key}
     except Exception:
         pass
 
@@ -64,9 +61,5 @@ def call_kpx_now(page: int = 1, perPage: int = 10) -> dict:
     except Exception:
         pass
 
-    return {
-        **data_to_store,
-        "cache": False,
-        "cache_key": cache_key,
-    }
+    return {**data_to_store, "cache": False, "cache_key": cache_key}
 

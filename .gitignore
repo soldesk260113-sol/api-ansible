@@ -1,4 +1,30 @@
-
-# Python cache
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+
+# IDE
+.vscode/
+.idea/
+
+# Env / secrets
+*.env
+.env
+.env.*
+/etc/team2/
+**/secrets/*
+**/*key*
+**/*token*
+
+# Logs
+*.log
+
+# Archives / big artifacts
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+
+# Local test artifacts
+api-check/
